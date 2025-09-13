@@ -21,7 +21,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DB = os.getenv("DB_PATH", "engage.db")
 
-# Optional: owner for /shutdown (numeric Telegram user ID)
+# Owner สำหรับ /shutdown (ใส่เป็นตัวเลข Telegram user id; ไม่ใส่ก็ได้)
 OWNER_ID_ENV = os.getenv("OWNER_ID")
 OWNER_ID = int(OWNER_ID_ENV) if OWNER_ID_ENV and OWNER_ID_ENV.isdigit() else None
 
@@ -74,7 +74,7 @@ async def upsert_user(user_id: int, username: str | None):
 async def add_event_and_xp(
     user_id: int, delta: int, typ: str, chat_id: int, message_id: int, meta: str = ""
 ) -> bool:
-    """Returns True if this event was newly counted (not a duplicate by UNIQUE)."""
+    """Returns True if this event was newly counted (not duplicate by UNIQUE)."""
     async with aiosqlite.connect(DB) as db:
         try:
             await db.execute(
@@ -274,13 +274,16 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.id, RULES["reaction_remove"], "reaction_remove", chat_id, msg_id, meta=",".join(old_set)
         )
 
-# ---------------------- Async startup (Python 3.13 friendly) ----------------------
-async def main():
+# ---------------------- Entry point (PTB v21, Py 3.13 safe) ----------------------
+def main():
     if not BOT_TOKEN:
         raise SystemExit("Please set BOT_TOKEN in environment")
-    await init_db()
+
+    # Init DB once (async)
+    asyncio.run(init_db())
 
     app = Application.builder().token(BOT_TOKEN).build()
+
     # Commands
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("rules", cmd_rules))
@@ -288,16 +291,12 @@ async def main():
     app.add_handler(CommandHandler("top", cmd_top))
     app.add_handler(CommandHandler("week", cmd_week))
     app.add_handler(CommandHandler("shutdown", cmd_shutdown))
+
     # Events
     app.add_handler(MessageReactionHandler(on_reaction))
 
-    # Explicit async lifecycle (works on Python 3.13 / Render)
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(allowed_updates=["message_reaction"])
-    await app.updater.idle()
-    await app.stop()
-    await app.shutdown()
+    # run_polling() ดูแล start/idle/stop เอง (เวิร์กกับ Python 3.13/Render)
+    app.run_polling(allowed_updates=["message_reaction"])
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
